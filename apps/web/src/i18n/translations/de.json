@@ -308,6 +308,8 @@
   "227120bfdd990e37": "{count, plural, one {Versucht, Designs {count}-mal zu prüfen} other {Versucht, Designs {count}-mal zu prüfen}}",
   "a16ae702cbb60dde": "{count, plural, one {Design {count}-mal festgelegt} other {Design {count}-mal festgelegt}}",
   "978b4b05bea775d1": "{count, plural, one {Versucht, das Design {count}-mal festzulegen} other {Versucht, das Design {count}-mal festzulegen}}",
+  "d8b1f66fdcddc81f": "{count, plural, one {Nutzungslimits {count}-mal geprüft} other {Nutzungslimits {count}-mal geprüft}}",
+  "4e5878373d857826": "{count, plural, one {Versucht, Nutzungslimits {count}-mal zu prüfen} other {Versucht, Nutzungslimits {count}-mal zu prüfen}}",
   "d533fcae02ad5016": "{count, plural, one {Verknüpfte Umgebungen {count}-mal aufgelistet} other {Verknüpfte Umgebungen {count}-mal aufgelistet}}",
   "78d34854295169a7": "{count, plural, one {Versucht, verknüpfte Umgebungen {count}-mal aufzulisten} other {Versucht, verknüpfte Umgebungen {count}-mal aufzulisten}}",
   "07edf9b32bf1f437": "{count, plural, one {Browser {count}-mal verwendet} other {Browser {count}-mal verwendet}}",

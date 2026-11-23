@@ -1156,6 +1156,23 @@ export function summarizeT3ToolCalls(
           );
       break;
     }
+    case "usage-read": {
+      const count = selected.length;
+      label = done
+        ? resolve(
+            msg(
+              "{count, plural, one {Checked usage limits {count} time} other {Checked usage limits {count} times}}",
+              { count },
+            ),
+          )
+        : resolve(
+            msg(
+              "{count, plural, one {Tried to check usage limits {count} time} other {Tried to check usage limits {count} times}}",
+              { count },
+            ),
+          );
+      break;
+    }
     case "environment-links": {
       const count = selected.length;
       label = done

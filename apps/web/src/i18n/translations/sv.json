@@ -308,6 +308,8 @@
   "227120bfdd990e37": "{count, plural, one {Försökte kontrollera teman {count} gång} other {Försökte kontrollera teman {count} gånger}}",
   "a16ae702cbb60dde": "{count, plural, one {Valde tema {count} gång} other {Valde tema {count} gånger}}",
   "978b4b05bea775d1": "{count, plural, one {Försökte välja tema {count} gång} other {Försökte välja tema {count} gånger}}",
+  "d8b1f66fdcddc81f": "{count, plural, one {Kontrollerade användningsgränser {count} gång} other {Kontrollerade användningsgränser {count} gånger}}",
+  "4e5878373d857826": "{count, plural, one {Försökte kontrollera användningsgränser {count} gång} other {Försökte kontrollera användningsgränser {count} gånger}}",
   "d533fcae02ad5016": "{count, plural, one {Listade länkade miljöer {count} gång} other {Listade länkade miljöer {count} gånger}}",
   "78d34854295169a7": "{count, plural, one {Försökte lista länkade miljöer {count} gång} other {Försökte lista länkade miljöer {count} gånger}}",
   "07edf9b32bf1f437": "{count, plural, one {Använde webbläsaren {count} gång} other {Använde webbläsaren {count} gånger}}",

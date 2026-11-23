@@ -308,6 +308,8 @@
   "227120bfdd990e37": "{count, plural, other {尝试检查主题 {count} 次}}",
   "a16ae702cbb60dde": "{count, plural, other {已设置主题 {count} 次}}",
   "978b4b05bea775d1": "{count, plural, other {尝试设置主题 {count} 次}}",
+  "d8b1f66fdcddc81f": "{count, plural, one {Checked usage limits {count} time} other {Checked usage limits {count} times}}",
+  "4e5878373d857826": "{count, plural, one {Tried to check usage limits {count} time} other {Tried to check usage limits {count} times}}",
   "d533fcae02ad5016": "{count, plural, other {已列出关联的环境 {count} 次}}",
   "78d34854295169a7": "{count, plural, other {尝试列出关联的环境 {count} 次}}",
   "07edf9b32bf1f437": "{count, plural, other {已使用浏览器 {count} 次}}",

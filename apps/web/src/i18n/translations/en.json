@@ -308,6 +308,8 @@
   "227120bfdd990e37": "{count, plural, one {Tried to check themes {count} time} other {Tried to check themes {count} times}}",
   "a16ae702cbb60dde": "{count, plural, one {Set the theme {count} time} other {Set the theme {count} times}}",
   "978b4b05bea775d1": "{count, plural, one {Tried to set the theme {count} time} other {Tried to set the theme {count} times}}",
+  "d8b1f66fdcddc81f": "{count, plural, one {Checked usage limits {count} time} other {Checked usage limits {count} times}}",
+  "4e5878373d857826": "{count, plural, one {Tried to check usage limits {count} time} other {Tried to check usage limits {count} times}}",
   "d533fcae02ad5016": "{count, plural, one {Listed linked environments {count} time} other {Listed linked environments {count} times}}",
   "78d34854295169a7": "{count, plural, one {Tried to list linked environments {count} time} other {Tried to list linked environments {count} times}}",
   "07edf9b32bf1f437": "{count, plural, one {Used browser {count} time} other {Used browser {count} times}}",

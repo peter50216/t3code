@@ -308,6 +308,8 @@
   "227120bfdd990e37": "{count, plural, other {테마 확인 {count}회 시도함}}",
   "a16ae702cbb60dde": "{count, plural, other {테마 {count}회 설정함}}",
   "978b4b05bea775d1": "{count, plural, other {테마 설정 {count}회 시도함}}",
+  "d8b1f66fdcddc81f": "{count, plural, other {사용량 한도 확인 {count}회}}",
+  "4e5878373d857826": "{count, plural, other {사용량 한도 확인 {count}회 시도함}}",
   "d533fcae02ad5016": "{count, plural, other {연결된 환경 목록 {count}회 조회함}}",
   "78d34854295169a7": "{count, plural, other {연결된 환경 목록 조회 {count}회 시도함}}",
   "07edf9b32bf1f437": "{count, plural, other {브라우저 {count}번 사용함}}",

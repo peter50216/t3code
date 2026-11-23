@@ -308,6 +308,8 @@
   "227120bfdd990e37": "{count, plural, one {Intentó consultar los temas {count} vez} other {Intentó consultar los temas {count} veces}}",
   "a16ae702cbb60dde": "{count, plural, one {Cambió el tema {count} vez} other {Cambió el tema {count} veces}}",
   "978b4b05bea775d1": "{count, plural, one {Intentó cambiar el tema {count} vez} other {Intentó cambiar el tema {count} veces}}",
+  "d8b1f66fdcddc81f": "{count, plural, one {Consultó los límites de uso {count} vez} other {Consultó los límites de uso {count} veces}}",
+  "4e5878373d857826": "{count, plural, one {Intentó consultar los límites de uso {count} vez} other {Intentó consultar los límites de uso {count} veces}}",
   "d533fcae02ad5016": "{count, plural, one {Listó entornos vinculados {count} vez} other {Listó entornos vinculados {count} veces}}",
   "78d34854295169a7": "{count, plural, one {Intentó listar entornos vinculados {count} vez} other {Intentó listar entornos vinculados {count} veces}}",
   "07edf9b32bf1f437": "{count, plural, one {Se usó el navegador {count} vez} other {Se usó el navegador {count} veces}}",

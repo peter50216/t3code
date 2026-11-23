@@ -5,6 +5,7 @@ import {
   ProviderInstanceId,
   ThreadId,
   type OrchestrationV2ThreadShell,
+  type ServerProvider,
 } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -106,4 +107,43 @@ it("keeps agent feedback out of the preferences agents read and write", () => {
   expect(
     Object.keys(EnvironmentToolkit.tools.t3_environment_preferences_update.parametersSchema.fields),
   ).not.toContain("agentFeedback");
+});
+
+it("lists usage limits for enabled providers that report them", () => {
+  const limits = {
+    checkedAt: "2026-11-23T12:00:00.000Z",
+    windows: [
+      {
+        id: "seven_day",
+        kind: "weekly" as const,
+        label: "Weekly",
+        usedPercent: 27,
+        resetsAt: "2026-11-27T07:00:00.000Z",
+      },
+    ],
+    credentialFingerprint: "fingerprint",
+  };
+  const provider = (instanceId: string, enabled: boolean, usageLimits?: typeof limits) =>
+    ({
+      instanceId: ProviderInstanceId.make(instanceId),
+      driver: "claudeAgent",
+      enabled,
+      usageLimits,
+    }) as unknown as ServerProvider;
+  expect(
+    EnvironmentHandlers.usageLimits([
+      provider("claude", true, limits),
+      provider("disabled", false, limits),
+      provider("no-limits", true),
+    ]),
+  ).toEqual([
+    {
+      instanceId: "claude",
+      driver: "claudeAgent",
+      displayName: undefined,
+      checkedAt: limits.checkedAt,
+      windows: limits.windows,
+      unavailable: undefined,
+    },
+  ]);
 });

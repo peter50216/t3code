@@ -1,7 +1,12 @@
-import { OrchestratorMcpFailure, type ServerSettings } from "@t3tools/contracts";
+import {
+  OrchestratorMcpFailure,
+  type ServerProvider,
+  type ServerSettings,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Environment from "../../../environment/ServerEnvironment.ts";
 import * as ThreadCommandExecutor from "../../../orchestration-v2/ThreadCommandExecutor.ts";
+import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
 import * as Settings from "../../../serverSettings.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -29,6 +34,22 @@ export function preferences(settings: ServerSettings) {
     },
   };
 }
+export function usageLimits(providers: ReadonlyArray<ServerProvider>) {
+  return providers.flatMap(({ enabled, instanceId, driver, displayName, usageLimits }) =>
+    enabled && usageLimits
+      ? [
+          {
+            instanceId,
+            driver,
+            displayName,
+            checkedAt: usageLimits.checkedAt,
+            windows: usageLimits.windows,
+            unavailable: usageLimits.unavailable,
+          },
+        ]
+      : [],
+  );
+}
 const access = Effect.gen(function* () {
   const context = yield* readCaller();
   const environment = yield* Environment.ServerEnvironment;
@@ -52,6 +73,13 @@ export const layer = McpToolAccess.toLayer(EnvironmentToolkit, {
         platform: descriptor.platform,
         preferences: preferences(current),
       };
+    }),
+  ),
+  t3_usage_limits_read: McpToolAccess.reads(() =>
+    Effect.gen(function* () {
+      yield* access;
+      const registry = yield* ProviderRegistry.ProviderRegistry;
+      return { providers: usageLimits(yield* registry.getProviders) };
     }),
   ),
   t3_environment_preferences_update: McpToolAccess.writesEnvironment((patch, check) =>

@@ -308,6 +308,8 @@
   "227120bfdd990e37": "{count, plural, other {テーマを {count} 回確認しようとしました}}",
   "a16ae702cbb60dde": "{count, plural, other {テーマを {count} 回設定しました}}",
   "978b4b05bea775d1": "{count, plural, other {テーマを {count} 回設定しようとしました}}",
+  "d8b1f66fdcddc81f": "{count, plural, other {使用量の上限を {count} 回確認しました}}",
+  "4e5878373d857826": "{count, plural, other {使用量の上限を {count} 回確認しようとしました}}",
   "d533fcae02ad5016": "{count, plural, other {リンク済みの環境を {count} 回一覧表示しました}}",
   "78d34854295169a7": "{count, plural, other {リンク済みの環境を {count} 回一覧表示しようとしました}}",
   "07edf9b32bf1f437": "{count, plural, other {ブラウザーを {count} 回使用しました}}",

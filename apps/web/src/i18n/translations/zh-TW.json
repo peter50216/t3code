@@ -308,6 +308,8 @@
   "227120bfdd990e37": "{count, plural, other {嘗試檢查主題 {count} 次}}",
   "a16ae702cbb60dde": "{count, plural, other {已設定主題 {count} 次}}",
   "978b4b05bea775d1": "{count, plural, other {嘗試設定主題 {count} 次}}",
+  "d8b1f66fdcddc81f": "{count, plural, other {檢查用量上限 {count} 次}}",
+  "4e5878373d857826": "{count, plural, other {嘗試檢查用量上限 {count} 次}}",
   "d533fcae02ad5016": "{count, plural, other {已列出關聯的環境 {count} 次}}",
   "78d34854295169a7": "{count, plural, other {嘗試列出關聯的環境 {count} 次}}",
   "07edf9b32bf1f437": "{count, plural, other {已使用瀏覽器 {count} 次}}",
