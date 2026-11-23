@@ -225,21 +225,37 @@ const make = Effect.gen(function* () {
     }));
   };
 
+  const resolveWorkspaceBindings = (project: OrchestrationProjectShell) =>
+    Effect.forEach(registry.workspace, (api) =>
+      api.workspace
+        .scope(project.workspaceRoot)
+        .pipe(
+          Effect.map((scope): ReadonlyArray<ProjectTrackerBinding> =>
+            scope === null
+              ? []
+              : [{ tracker: api.kind, host: api.workspace.host, scope, accountId: null }],
+          ),
+        ),
+    ).pipe(Effect.map((bindings) => bindings.flat()));
+
   /**
-   * Where a project's issues live: its bound standalone tracker, its git host's, or both. The
-   * tracker bound in Settings leads, as the one the user chose for the project.
+   * Where a project's issues live: its bound standalone tracker, a tracker in its own files, its
+   * git host's, or several. The tracker bound in Settings leads, as the one the user chose for the
+   * project; a tracker the project keeps in its files comes before the git host's.
    */
   const resolveProjectTracker = (
     project: OrchestrationProjectShell,
     binding: IssueTrackerProjectBinding | undefined,
   ) =>
-    (project.repositoryIdentity != null
-      ? Effect.succeed(project.repositoryIdentity)
-      : repositoryIdentities.resolve(project.workspaceRoot)
-    ).pipe(
-      Effect.map((repositoryIdentity) => {
+    Effect.all([
+      project.repositoryIdentity != null
+        ? Effect.succeed(project.repositoryIdentity)
+        : repositoryIdentities.resolve(project.workspaceRoot),
+      resolveWorkspaceBindings(project),
+    ]).pipe(
+      Effect.map(([repositoryIdentity, workspace]) => {
         const gitHost = resolveGitHostBindings({ ...project, repositoryIdentity });
-        return [...resolveStandaloneBindings(binding), ...gitHost];
+        return [...resolveStandaloneBindings(binding), ...workspace, ...gitHost];
       }),
     );
 

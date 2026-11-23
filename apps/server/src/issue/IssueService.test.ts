@@ -16,6 +16,7 @@ import {
   type IssueTrackerApi,
   type StandaloneIssueTrackerApi,
   type TrackerIssueDetail,
+  type WorkspaceIssueTrackerApi,
 } from "@t3tools/source-control-core/server/IssueTracker";
 import { IssueTrackerAccount } from "@t3tools/source-control-core/server/IssueTrackerHost";
 
@@ -967,6 +968,61 @@ describe("IssueService with a standalone tracker", () => {
         "old-created-recent-update",
         "new-created-older-update",
       ]);
+    }),
+  );
+});
+
+describe("IssueService with a workspace tracker", () => {
+  it.effect("lists a project's own tickets before its git host and leads its scope with them", () =>
+    Effect.gen(function* () {
+      const TK = IssueTrackerKind.make("tk");
+      const listed: string[] = [];
+      const record = (kind: string) => (input: { host: string; scope: string }) => {
+        listed.push(`${kind} ${input.host} ${input.scope}`);
+        return Effect.succeed({ items: [issue("1")], nextCursor: null });
+      };
+      const tk: WorkspaceIssueTrackerApi = {
+        ...fakeTracker({ listIssues: record("tk") }),
+        kind: TK,
+        workspace: {
+          host: "local",
+          scope: (root) => Effect.succeed(root === "/w/game" ? "~/game" : null),
+        },
+      };
+      const service = yield* makeService({
+        projects: [
+          project({ id: "game", repository: "acme/game" }),
+          project({ id: "web", repository: "acme/web" }),
+        ],
+        trackers: [fakeTracker({ listIssues: record("github") }), tk],
+      });
+
+      const result = yield* service.list({ state: "open" });
+      expect(listed.sort()).toEqual([
+        "github github.com acme/game",
+        "github github.com acme/web",
+        "tk local ~/game",
+      ]);
+      expect(
+        result.trackers.map((tracker) => [tracker.tracker, tracker.projectCount]).sort(),
+      ).toEqual([
+        ["github", 2],
+        ["tk", 1],
+      ]);
+      expect(yield* service.projectScope("game" as ProjectId)).toMatchObject({
+        tracker: TK,
+        host: "local",
+        scope: "~/game",
+      });
+      expect((yield* service.projectScope("web" as ProjectId)).tracker).toBe(GITHUB);
+      expect(
+        yield* service.detail({
+          projectId: "game" as ProjectId,
+          tracker: TK,
+          scope: "~/game",
+          key: "1",
+        }),
+      ).toMatchObject({ host: "local", writable: true });
     }),
   );
 });

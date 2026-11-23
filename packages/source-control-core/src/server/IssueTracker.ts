@@ -232,3 +232,20 @@ export interface StandaloneIssueTrackerApi extends IssueTrackerApi {
 export function isStandaloneIssueTracker(api: IssueTrackerApi): api is StandaloneIssueTrackerApi {
   return "standalone" in api;
 }
+
+/**
+ * A tracker kept in the project's own files, such as tk's `.tickets` directory. It needs no
+ * credential and no binding: a project reads it when `scope` names one for the project's root.
+ */
+export interface WorkspaceIssueTrackerApi extends IssueTrackerApi {
+  readonly workspace: {
+    /** What `IssueRef.host` carries for its issues. */
+    readonly host: string;
+    /** The scope the project's root holds, or null when the root has no such tracker. */
+    readonly scope: (workspaceRoot: string) => Effect.Effect<string | null>;
+  };
+}
+
+export function isWorkspaceIssueTracker(api: IssueTrackerApi): api is WorkspaceIssueTrackerApi {
+  return "workspace" in api;
+}
