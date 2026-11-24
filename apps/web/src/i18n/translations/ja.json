@@ -12923,5 +12923,10 @@
   "201490988858b511": "{by} が取り下げ",
   "99451a5d2d40440f": "{by} が取り下げました。",
   "3ee30a50b70fffab": "{by} が取り下げました: {reason}",
-  "92e129bf413a1220": "取り下げ済み"
+  "92e129bf413a1220": "取り下げ済み",
+  "78ceb92a5b33a779": "Command not run",
+  "77dadedc6e8f5a6c": "You do not have permission to run commands in this environment.",
+  "2823613d15647cd1": "Command failed to run",
+  "33c49492e6251b7c": "Command output not attached",
+  "3954ff49fded1874": "You left the thread before the command finished."
 }

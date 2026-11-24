@@ -1,5 +1,15 @@
 # Terminal
 
+## Run a command from the composer
+
+Type `!` and a command in the composer, then send it. T3 Code runs the command
+in the thread's checkout and does not start a turn. The output, with the exit
+code when it is not 0, goes into your draft as terminal context. Add your
+question and send the message to give the output to the agent.
+
+The command runs without a terminal, so it cannot ask for input. T3 Code stops
+it after 2 minutes. To run an interactive command, use the terminal drawer.
+
 ## Choose a shell
 
 Set `T3CODE_TERMINAL_SHELL` in the environment that launches the T3 Code server

@@ -12987,5 +12987,10 @@
   "201490988858b511": "отозван: {by}",
   "99451a5d2d40440f": "Отозван: {by}.",
   "3ee30a50b70fffab": "Отозван ({by}): {reason}",
-  "92e129bf413a1220": "отозван"
+  "92e129bf413a1220": "отозван",
+  "78ceb92a5b33a779": "Command not run",
+  "77dadedc6e8f5a6c": "You do not have permission to run commands in this environment.",
+  "2823613d15647cd1": "Command failed to run",
+  "33c49492e6251b7c": "Command output not attached",
+  "3954ff49fded1874": "You left the thread before the command finished."
 }

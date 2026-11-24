@@ -270,6 +270,26 @@ export const TerminalAttachInput = Schema.Struct({
 });
 export type TerminalAttachInput = typeof TerminalAttachInput.Type;
 
+/** Longest command a composer `!` line may run, in UTF-16 code units. */
+const TERMINAL_RUN_COMMAND_MAX_LENGTH = 8_192;
+
+/** One non-interactive shell command, run for the composer's `!` prefix. */
+export const TerminalRunCommandInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  command: TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(TERMINAL_RUN_COMMAND_MAX_LENGTH)),
+  env: Schema.optional(TerminalEnvSchema),
+});
+export type TerminalRunCommandInput = typeof TerminalRunCommandInput.Type;
+
+export const TerminalRunCommandResult = Schema.Struct({
+  stdout: Schema.String,
+  stderr: Schema.String,
+  exitCode: Schema.NullOr(Schema.Int),
+  timedOut: Schema.Boolean,
+  truncated: Schema.Boolean,
+});
+export type TerminalRunCommandResult = typeof TerminalRunCommandResult.Type;
+
 /** Longest `data` one `terminal.write` carries, in UTF-16 code units. */
 export const TERMINAL_WRITE_MAX_LENGTH = 65_536;
 
@@ -624,6 +644,18 @@ export class TerminalProcessChangedError extends Schema.TaggedError<TerminalProc
   {},
 ) {}
 
+export class TerminalRunCommandError extends Schema.TaggedError<TerminalRunCommandError>()(
+  "TerminalRunCommandError",
+  {
+    cwd: Schema.String,
+    detail: Schema.String,
+  },
+) {
+  override get message() {
+    return `Failed to run the command in ${this.cwd}: ${this.detail}`;
+  }
+}
+
 export const TerminalError = Schema.Union([
   TerminalCwdError,
   TerminalHistoryError,
@@ -634,5 +666,6 @@ export const TerminalError = Schema.Union([
   TerminalProcessChangedError,
   TerminalWriteError,
   TerminalResizeError,
+  TerminalRunCommandError,
 ]);
 export type TerminalError = typeof TerminalError.Type;

@@ -109,6 +109,7 @@ import {
   referencedThreadContexts,
 } from "./composerSend.logic";
 import { useMultipleModelSend } from "./useMultipleModelSend";
+import { useComposerShellCommand } from "./useComposerShellCommand";
 import type { SideChatMessage } from "./useSideChat";
 import { type ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 import {
@@ -388,6 +389,14 @@ export function useComposerSend(input: ComposerSendInput) {
     reportFailure: false,
   });
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
+  const runComposerShellCommand = useComposerShellCommand({
+    environmentId,
+    routeThreadKey,
+    currentRouteThreadKeyRef,
+    projectRoot: activeProject?.workspaceRoot ?? null,
+    worktreePath: activeThread?.worktreePath ?? draftThread?.worktreePath ?? null,
+    composerRef,
+  });
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const sendToMultipleModels = useMultipleModelSend({
     environmentId,
@@ -447,6 +456,22 @@ export function useComposerSend(input: ComposerSendInput) {
           composerRef.current?.resetCursorState();
         }
       }
+      return;
+    }
+    if (
+      !directAnnotation &&
+      !detachedOverride &&
+      !queuedRunEdit.isEditing &&
+      !activePendingUserInput &&
+      runComposerShellCommand(promptAtSend, (prompt) => {
+        setComposerDraftPrompt(composerDraftTarget, prompt);
+        promptRef.current = prompt;
+        composerRef.current?.resetCursorState({
+          prompt,
+          cursor: collapseExpandedComposerCursor(prompt, prompt.length),
+        });
+      })
+    ) {
       return;
     }
 
