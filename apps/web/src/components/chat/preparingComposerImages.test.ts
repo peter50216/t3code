@@ -73,8 +73,8 @@ it("holds a message send until running shell commands and images are done", asyn
   };
   drafts.setPrompt(draftTarget, "why did it fail?");
 
-  const finishFirst = trackRunningShellCommand(target);
-  const finishSecond = trackRunningShellCommand(target);
+  const finishFirst = trackRunningShellCommand(target, "make");
+  const finishSecond = trackRunningShellCommand(target, "make");
   addPreparingComposerImages(target, [preparingImage("shot")]);
   const held = holdComposerSend(draftTarget);
   let settled = false;
@@ -92,7 +92,7 @@ it("holds a message send until running shell commands and images are done", asyn
   await expect(held).resolves.toEqual({ status: "ready" });
   expect(holdComposerSend(draftTarget)).toBeNull();
 
-  const finishFailed = trackRunningShellCommand(target);
+  const finishFailed = trackRunningShellCommand(target, "make");
   const cancelled = holdComposerSend(draftTarget);
   cancelHeldComposerSend(target);
   finishFailed();

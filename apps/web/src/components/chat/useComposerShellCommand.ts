@@ -64,13 +64,7 @@ export function useComposerShellCommand(input: ComposerShellCommandInput) {
 
     replaceDraft(line.remainingPrompt);
     const targetKey = composerTargetKey(input.composerDraftTarget);
-    const finishRunning = trackRunningShellCommand(targetKey);
-    const toastId = toastManager.add({
-      type: "loading",
-      title: m(msg("Running command")),
-      description: line.command,
-      timeout: 0,
-    });
+    const finishRunning = trackRunningShellCommand(targetKey, line.command);
 
     void runCommand({
       environmentId,
@@ -116,10 +110,7 @@ export function useComposerShellCommand(input: ComposerShellCommandInput) {
         const context = shellCommandTerminalContext(randomUUID(), line.command, result.value);
         joinPreparedImagesToDraft(() => composerRef.current?.addTerminalContext(context));
       })
-      .finally(() => {
-        finishRunning();
-        toastManager.close(toastId);
-      });
+      .finally(finishRunning);
     return true;
   };
 }

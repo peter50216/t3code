@@ -13001,5 +13001,7 @@
   "77dadedc6e8f5a6c": "You do not have permission to run commands in this environment.",
   "2823613d15647cd1": "Command failed to run",
   "33c49492e6251b7c": "Command output not attached",
-  "3954ff49fded1874": "You left the thread before the command finished."
+  "3954ff49fded1874": "You left the thread before the command finished.",
+  "b717c1add0b04107": "{count, plural, one {Running command} other {Running {count} commands}}",
+  "6660c9fad3e31241": "{count, plural, one {Sending once the command finishes} other {Sending once {count} commands finish}}"
 }

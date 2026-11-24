@@ -60,9 +60,16 @@ import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
 import { feedbackBannerItem } from "./chat/ComposerFeedback";
 import { freshSessionBannerItem } from "./chat/ComposerFreshSession";
-import { heldComposerSendBannerItem } from "./chat/ComposerHeldSendBanner";
+import {
+  heldComposerSendBannerItem,
+  runningShellCommandsBannerItem,
+} from "./chat/ComposerHeldSendBanner";
 import { armFreshSession, disarmFreshSession, useFreshSessionArmed } from "./chat/freshSessionArms";
-import { cancelHeldComposerSend, useComposerSendHeld } from "./chat/preparingComposerImages";
+import {
+  cancelHeldComposerSend,
+  useComposerSendHeld,
+  useRunningShellCommands,
+} from "./chat/preparingComposerImages";
 import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";
 import { useWorktreeSetup } from "./chat/useWorktreeSetup";
 import { useChatShortcuts } from "./chat/useChatShortcuts";
@@ -2713,6 +2720,7 @@ export default function ChatView(props: ChatViewProps) {
     freshSessionAvailable && activePendingApproval === null && pendingUserInputs.length === 0;
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);
   const composerSendHeld = useComposerSendHeld(composerDraftTargetKey);
+  const runningShellCommands = useRunningShellCommands(composerDraftTargetKey);
   const cancelHeldSendStable = useStableCallback(() => {
     cancelHeldComposerSend(composerDraftTargetKey);
     focusComposerStable();
@@ -2831,6 +2839,10 @@ export default function ChatView(props: ChatViewProps) {
       freshSessionPending && activePendingApproval === null
         ? [freshSessionBannerItem(() => disarmFreshSession(routeThreadKey), messages)]
         : [];
+    const runningShellCommandItems =
+      runningShellCommands.length > 0
+        ? [runningShellCommandsBannerItem(runningShellCommands, messages)]
+        : [];
     const heldSendItems = composerSendHeld
       ? [
           heldComposerSendBannerItem(
@@ -2848,6 +2860,7 @@ export default function ChatView(props: ChatViewProps) {
         ...usageLimitsItems,
         ...projectCloneItems,
         ...freshSessionItems,
+        ...runningShellCommandItems,
         ...heldSendItems,
         ...systemComposerBannerItems,
       ];
@@ -2860,6 +2873,7 @@ export default function ChatView(props: ChatViewProps) {
       ...usageLimitsItems,
       ...projectCloneItems,
       ...freshSessionItems,
+      ...runningShellCommandItems,
       ...heldSendItems,
       ...systemComposerBannerItems,
       branchMismatchBannerItem(

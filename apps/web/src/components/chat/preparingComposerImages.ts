@@ -9,6 +9,7 @@ import {
   useComposerDraftStore,
 } from "../../composerDraftStore";
 import { useStableCallback } from "../../hooks/useStableCallback";
+import { randomUUID } from "../../lib/utils";
 import { composerDraftContentChanged } from "./composerSend.logic";
 
 export interface PreparingComposerImage {
@@ -122,32 +123,43 @@ export function removePreparingComposerImages(
   return removed;
 }
 
-/** Composer `!` commands still running per target. A send waits for their output, as for images. */
-const useRunningShellCommandStore = create<{
-  readonly byTargetKey: Readonly<Record<string, number>>;
-}>(() => ({ byTargetKey: {} }));
-
-function countRunningShellCommands(targetKey: string): number {
-  return useRunningShellCommandStore.getState().byTargetKey[targetKey] ?? 0;
+export interface RunningShellCommand {
+  readonly id: string;
+  readonly command: string;
 }
 
-/** Counts a `!` command as running for the target. Call the returned function once it ends. */
-export function trackRunningShellCommand(targetKey: string): () => void {
-  const add = (delta: number) =>
+const NO_RUNNING_SHELL_COMMANDS: ReadonlyArray<RunningShellCommand> = [];
+
+/** Composer `!` commands still running per target. A send waits for their output, as for images. */
+const useRunningShellCommandStore = create<{
+  readonly byTargetKey: Readonly<Record<string, ReadonlyArray<RunningShellCommand>>>;
+}>(() => ({ byTargetKey: {} }));
+
+export function useRunningShellCommands(targetKey: string): ReadonlyArray<RunningShellCommand> {
+  return useRunningShellCommandStore(
+    (state) => state.byTargetKey[targetKey] ?? NO_RUNNING_SHELL_COMMANDS,
+  );
+}
+
+function countRunningShellCommands(targetKey: string): number {
+  return useRunningShellCommandStore.getState().byTargetKey[targetKey]?.length ?? 0;
+}
+
+/** Shows a `!` command as running for the target. Call the returned function once it ends. */
+export function trackRunningShellCommand(targetKey: string, command: string): () => void {
+  const entry: RunningShellCommand = { id: randomUUID(), command };
+  const update = (
+    change: (current: ReadonlyArray<RunningShellCommand>) => ReadonlyArray<RunningShellCommand>,
+  ) =>
     useRunningShellCommandStore.setState(({ byTargetKey }) => {
       const next = { ...byTargetKey };
-      const count = (next[targetKey] ?? 0) + delta;
-      if (count > 0) next[targetKey] = count;
+      const commands = change(next[targetKey] ?? NO_RUNNING_SHELL_COMMANDS);
+      if (commands.length > 0) next[targetKey] = commands;
       else delete next[targetKey];
       return { byTargetKey: next };
     });
-  add(1);
-  let finished = false;
-  return () => {
-    if (finished) return;
-    finished = true;
-    add(-1);
-  };
+  update((current) => [...current, entry]);
+  return () => update((current) => current.filter((running) => running !== entry));
 }
 
 // Bumped on cancel so a send held for the cancelled images is dropped rather than released.
