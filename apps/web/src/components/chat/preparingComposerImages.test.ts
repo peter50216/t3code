@@ -10,6 +10,7 @@ import {
   holdComposerSend,
   joinPreparedImagesToDraft,
   removePreparingComposerImages,
+  trackRunningShellCommand,
 } from "./preparingComposerImages";
 
 function preparingImage(id: string) {
@@ -55,4 +56,45 @@ it("holds a message send until its images join the draft, and cancels on edit, c
     await expect(cancelled).resolves.toEqual({ status: "cancelled" });
     cancelPreparingComposerImages(target);
   }
+});
+
+it("holds a message send until running shell commands and images are done", async () => {
+  const draftTarget = scopeThreadRef(
+    EnvironmentId.make("environment-shell"),
+    ThreadId.make("shell"),
+  );
+  const target = composerTargetKey(draftTarget);
+  const drafts = useComposerDraftStore.getState();
+  using _store = {
+    [Symbol.dispose]: () => {
+      cancelPreparingComposerImages(target);
+      drafts.clearComposerContent(draftTarget);
+    },
+  };
+  drafts.setPrompt(draftTarget, "why did it fail?");
+
+  const finishFirst = trackRunningShellCommand(target);
+  const finishSecond = trackRunningShellCommand(target);
+  addPreparingComposerImages(target, [preparingImage("shot")]);
+  const held = holdComposerSend(draftTarget);
+  let settled = false;
+  void held?.then(() => {
+    settled = true;
+  });
+  finishFirst();
+  finishFirst();
+  joinPreparedImagesToDraft(() => drafts.setPrompt(draftTarget, "why did it fail? [output]"));
+  removePreparingComposerImages(target, new Set(["shot"]));
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  finishSecond();
+  await expect(held).resolves.toEqual({ status: "ready" });
+  expect(holdComposerSend(draftTarget)).toBeNull();
+
+  const finishFailed = trackRunningShellCommand(target);
+  const cancelled = holdComposerSend(draftTarget);
+  cancelHeldComposerSend(target);
+  finishFailed();
+  await expect(cancelled).resolves.toEqual({ status: "cancelled" });
 });

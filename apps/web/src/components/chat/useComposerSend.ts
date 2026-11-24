@@ -396,6 +396,7 @@ export function useComposerSend(input: ComposerSendInput) {
     projectRoot: activeProject?.workspaceRoot ?? null,
     worktreePath: activeThread?.worktreePath ?? draftThread?.worktreePath ?? null,
     composerRef,
+    composerDraftTarget,
   });
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const sendToMultipleModels = useMultipleModelSend({

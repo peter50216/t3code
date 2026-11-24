@@ -5,7 +5,9 @@
 Type `!` and a command in the composer, then send it. T3 Code runs the command
 in the thread's checkout and does not start a turn. The output, with the exit
 code when it is not 0, goes into your draft as terminal context. Add your
-question and send the message to give the output to the agent.
+question and send the message to give the output to the agent. If you send
+before the command ends, the message waits for the output. If you edit the
+draft or the command fails, the message is not sent.
 
 The command runs without a terminal, so it cannot ask for input. T3 Code stops
 it after 2 minutes. To run an interactive command, use the terminal drawer.

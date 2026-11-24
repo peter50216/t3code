@@ -9,6 +9,7 @@ import { msg } from "gt-react";
 
 import { m } from "~/i18n/messages";
 import { randomUUID } from "~/lib/utils";
+import { composerTargetKey, type ComposerThreadTarget } from "../../composerDraftStore";
 import type { ComposerHandleRef } from "../../composerHandleContext";
 import {
   parseComposerShellCommandLine,
@@ -18,6 +19,11 @@ import { readEnvironmentScope } from "../../state/session";
 import { terminalEnvironment } from "../../state/terminal";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import {
+  cancelHeldComposerSend,
+  joinPreparedImagesToDraft,
+  trackRunningShellCommand,
+} from "./preparingComposerImages";
 
 interface ComposerShellCommandInput {
   readonly environmentId: EnvironmentId;
@@ -26,12 +32,14 @@ interface ComposerShellCommandInput {
   readonly projectRoot: string | null;
   readonly worktreePath: string | null;
   readonly composerRef: ComposerHandleRef;
+  readonly composerDraftTarget: ComposerThreadTarget;
 }
 
 /**
  * Runs a draft's `! <command>` on the environment server and attaches the output to the draft
  * as terminal context. Returns false for a draft that is not a shell command line.
  * `replaceDraft` takes the `! <command>` text out of the draft before the command runs.
+ * A send made while the command runs waits for its output, and is cancelled without it.
  */
 export function useComposerShellCommand(input: ComposerShellCommandInput) {
   const runCommand = useAtomCommand(terminalEnvironment.runCommand, {
@@ -55,6 +63,8 @@ export function useComposerShellCommand(input: ComposerShellCommandInput) {
     }
 
     replaceDraft(line.remainingPrompt);
+    const targetKey = composerTargetKey(input.composerDraftTarget);
+    const finishRunning = trackRunningShellCommand(targetKey);
     const toastId = toastManager.add({
       type: "loading",
       title: m(msg("Running command")),
@@ -78,6 +88,7 @@ export function useComposerShellCommand(input: ComposerShellCommandInput) {
     })
       .then((result) => {
         if (result._tag === "Failure") {
+          cancelHeldComposerSend(targetKey);
           if (isAtomCommandInterrupted(result)) return;
           toastManager.add(
             stackedThreadToast({
@@ -92,6 +103,7 @@ export function useComposerShellCommand(input: ComposerShellCommandInput) {
         }
         // The composer on screen belongs to another thread once the user leaves this one.
         if (currentRouteThreadKeyRef.current !== routeThreadKey) {
+          cancelHeldComposerSend(targetKey);
           toastManager.add(
             stackedThreadToast({
               type: "info",
@@ -101,11 +113,13 @@ export function useComposerShellCommand(input: ComposerShellCommandInput) {
           );
           return;
         }
-        composerRef.current?.addTerminalContext(
-          shellCommandTerminalContext(randomUUID(), line.command, result.value),
-        );
+        const context = shellCommandTerminalContext(randomUUID(), line.command, result.value);
+        joinPreparedImagesToDraft(() => composerRef.current?.addTerminalContext(context));
       })
-      .finally(() => toastManager.close(toastId));
+      .finally(() => {
+        finishRunning();
+        toastManager.close(toastId);
+      });
     return true;
   };
 }

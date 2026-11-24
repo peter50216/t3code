@@ -122,6 +122,34 @@ export function removePreparingComposerImages(
   return removed;
 }
 
+/** Composer `!` commands still running per target. A send waits for their output, as for images. */
+const useRunningShellCommandStore = create<{
+  readonly byTargetKey: Readonly<Record<string, number>>;
+}>(() => ({ byTargetKey: {} }));
+
+function countRunningShellCommands(targetKey: string): number {
+  return useRunningShellCommandStore.getState().byTargetKey[targetKey] ?? 0;
+}
+
+/** Counts a `!` command as running for the target. Call the returned function once it ends. */
+export function trackRunningShellCommand(targetKey: string): () => void {
+  const add = (delta: number) =>
+    useRunningShellCommandStore.setState(({ byTargetKey }) => {
+      const next = { ...byTargetKey };
+      const count = (next[targetKey] ?? 0) + delta;
+      if (count > 0) next[targetKey] = count;
+      else delete next[targetKey];
+      return { byTargetKey: next };
+    });
+  add(1);
+  let finished = false;
+  return () => {
+    if (finished) return;
+    finished = true;
+    add(-1);
+  };
+}
+
 // Bumped on cancel so a send held for the cancelled images is dropped rather than released.
 const cancelGenerations = new Map<string, number>();
 
@@ -149,7 +177,7 @@ export function cancelHeldComposerSend(targetKey: string): void {
   heldSends.get(targetKey)?.({ status: "cancelled" });
 }
 
-/** Inserts finished images into the draft without counting as an edit to a held send. */
+/** Inserts finished images or command output into the draft without counting as an edit to a held send. */
 export function joinPreparedImagesToDraft<T>(insert: () => T): T {
   preparedImagesJoiningDraft = true;
   try {
@@ -160,15 +188,17 @@ export function joinPreparedImagesToDraft<T>(insert: () => T): T {
 }
 
 /**
- * Holds a send made while the draft still has images compressing. Resolves ready once they join
- * the draft, or cancelled if the draft is edited or the send cancelled. Null means nothing needs
- * to wait. Lives outside the composer so leaving the thread still completes the send.
+ * Holds a send made while the draft still has images compressing or `!` commands running. Resolves
+ * ready once they join the draft, or cancelled if the draft is edited or the send cancelled. Null
+ * means nothing needs to wait. Lives outside the composer so leaving the thread still completes it.
  */
 export function holdComposerSend(
   draftTarget: ComposerThreadTarget,
 ): Promise<HeldComposerSendResult> | null {
   const targetKey = composerTargetKey(draftTarget);
-  if (countPreparingComposerImages(targetKey) === 0) return null;
+  const stillPreparing = () =>
+    countPreparingComposerImages(targetKey) > 0 || countRunningShellCommands(targetKey) > 0;
+  if (!stillPreparing()) return null;
   if (heldSends.has(targetKey)) return Promise.resolve({ status: "cancelled" });
   return new Promise((resolve) => {
     let draft = useComposerDraftStore.getState().getComposerDraft(draftTarget);
@@ -176,6 +206,7 @@ export function holdComposerSend(
       if (heldSends.get(targetKey) !== settle) return;
       heldSends.delete(targetKey);
       stopWatchingImages();
+      stopWatchingCommands();
       stopWatchingDraft();
       useHeldSendStore.setState((state) => {
         const targetKeys = { ...state.targetKeys };
@@ -185,11 +216,13 @@ export function holdComposerSend(
       resolve(result);
     };
     heldSends.set(targetKey, settle);
-    const stopWatchingImages = usePreparingComposerImageStore.subscribe((state) => {
-      if (state.byTargetKey[targetKey]) return;
-      // Let joinPreparedImagesToDraft finish inserting compressed images in this tick first.
+    const settleWhenPrepared = () => {
+      if (stillPreparing()) return;
+      // Let joinPreparedImagesToDraft finish inserting into the draft in this tick first.
       queueMicrotask(() => settle({ status: "ready" }));
-    });
+    };
+    const stopWatchingImages = usePreparingComposerImageStore.subscribe(settleWhenPrepared);
+    const stopWatchingCommands = useRunningShellCommandStore.subscribe(settleWhenPrepared);
     const stopWatchingDraft = useComposerDraftStore.subscribe((state) => {
       const next = state.getComposerDraft(draftTarget);
       if (
