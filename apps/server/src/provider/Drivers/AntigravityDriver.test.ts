@@ -33,6 +33,7 @@ import * as ServerSettings from "../../serverSettings.ts";
 import * as AntigravityInstallation from "../AntigravityInstallation.ts";
 import {
   ANTIGRAVITY_AUTH_STDOUT_PREFIX,
+  ANTIGRAVITY_OAUTH_TOKEN_FILENAME,
   resolveAntigravityInstanceDirectories,
 } from "../antigravityAuthSupport.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
@@ -860,5 +861,110 @@ it.layer(layerTest)("AntigravityDriver", (it) => {
         expect(levelOf(yield* h.instance.snapshot.getSnapshot, "gemini-test-low")).toBe("high");
         yield* h.assertClosed;
       }),
+  );
+
+  it.effect("reads usage limits via agy --print /usage --output-format json when signed in", () =>
+    Effect.gen(function* () {
+      if (windowsHost) return;
+      const h = yield* makeHarness();
+      const path = yield* Path.Path;
+      const acpDir = path.join(h.profileDirectory, "antigravity-acp");
+      yield* h.fs.makeDirectory(acpDir, { recursive: true });
+      yield* h.fs.writeFileString(
+        path.join(acpDir, ANTIGRAVITY_OAUTH_TOKEN_FILENAME),
+        "fixture-oauth-token",
+      );
+      const usagePayload = {
+        conversation_id: "",
+        status: "SUCCESS",
+        response: "",
+        command: {
+          name: "usage",
+          data: {
+            groups: [
+              {
+                name: "Gemini Models",
+                buckets: [
+                  {
+                    id: "gemini-5h",
+                    window: "5h",
+                    remaining_fraction: 0.6,
+                    reset_time: "2026-11-26T12:00:00Z",
+                  },
+                  {
+                    id: "gemini-weekly",
+                    window: "weekly",
+                    remaining_fraction: 0.9,
+                    reset_time: "2026-12-03T12:00:00Z",
+                  },
+                ],
+              },
+              {
+                name: "Claude and GPT models",
+                buckets: [
+                  {
+                    id: "3p-5h",
+                    window: "5h",
+                    remaining_fraction: 1,
+                    reset_time: "2026-11-26T14:00:00Z",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
+      const usageDir = yield* h.fs.makeTempDirectoryScoped({ prefix: "t3-ag-usage-bin-" });
+      const usageExecutable = path.join(usageDir, "agy");
+      yield* h.fs.writeFileString(
+        usageExecutable,
+        [
+          "#!/bin/sh",
+          'if [ "$1" = "--print" ] && [ "$2" = "/usage" ]; then',
+          '  if [ ! -f "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ]; then exit 2; fi',
+          `  printf '%s\\n' ${shellQuote(JSON.stringify(usagePayload))}`,
+          "  exit 0",
+          "fi",
+          "exit 1",
+          "",
+        ].join("\n"),
+      );
+      yield* h.fs.chmod(usageExecutable, 0o755);
+      h.controls.selected = {
+        executablePath: usageExecutable,
+        source: "managed",
+        version: "1.5.18",
+        managedVersionDirectory: usageDir,
+      };
+
+      const snapshot = yield* h.instance.snapshot.refresh;
+      expect(snapshot.usageLimits?.unavailable).toBeUndefined();
+      expect(snapshot.usageLimits?.windows).toEqual([
+        {
+          id: "3p-5h",
+          kind: "session",
+          label: "Claude & GPT 5h",
+          usedPercent: 0,
+          windowDurationMins: 300,
+          resetsAt: "2026-11-26T14:00:00.000Z",
+        },
+        {
+          id: "gemini-5h",
+          kind: "session",
+          label: "Gemini 5h",
+          usedPercent: 40,
+          windowDurationMins: 300,
+          resetsAt: "2026-11-26T12:00:00.000Z",
+        },
+        {
+          id: "gemini-weekly",
+          kind: "weekly",
+          label: "Gemini Weekly",
+          usedPercent: 10,
+          windowDurationMins: 10080,
+          resetsAt: "2026-12-03T12:00:00.000Z",
+        },
+      ]);
+    }),
   );
 });

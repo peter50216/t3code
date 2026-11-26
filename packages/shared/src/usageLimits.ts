@@ -59,6 +59,14 @@ export function exhaustedUsageWindow(
       return exhausted.find(
         (window) => !window.id.startsWith("go_") || model.startsWith("opencode-go/"),
       );
+    case "antigravity":
+      return exhausted.find((window) =>
+        window.id.startsWith("gemini-")
+          ? model.startsWith("gemini")
+          : window.id.startsWith("3p-")
+            ? !model.startsWith("gemini")
+            : true,
+      );
     default:
       return exhausted[0];
   }
@@ -627,7 +635,11 @@ function poolMember(account: LimitAccount, reported: ServerProviderUsageWindow, 
             window.usedPercent >= 100 &&
             (account.driver === "claudeAgent"
               ? window.id === "seven_day"
-              : account.driver === "codex" && window.kind === "weekly"),
+              : account.driver === "codex"
+                ? window.kind === "weekly"
+                : account.driver === "antigravity" &&
+                  window.kind === "weekly" &&
+                  window.id.replace(/-weekly$/, "") === reported.id.replace(/-5h$/, "")),
         )
       : undefined;
   if (!spentWeekly) return { account, window: reported, refillPercent: reported.usedPercent };

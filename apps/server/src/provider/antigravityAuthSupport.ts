@@ -59,6 +59,8 @@ const browserHelperSource =
   `()=>process.exit(0))`;
 const browserPreflightUrl = "https://example.invalid/t3-antigravity-browser-preflight";
 
+export const ANTIGRAVITY_OAUTH_TOKEN_FILENAME = "antigravity-oauth-token";
+
 const removedEnvironmentKeys = new Set([
   "GEMINI_API_KEY",
   "GOOGLE_API_KEY",
@@ -80,6 +82,41 @@ const removedEnvironmentKeys = new Set([
   // An inherited pipe whose owner exited makes Electron-as-Node print Crashpad errors to stderr.
   "CHROME_CRASHPAD_PIPE_NAME",
 ]);
+
+export function stripAntigravityAmbientEnvironment(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(baseEnv)) {
+    // Windows treats environment keys as case-insensitive. Remove aliases too.
+    if (!removedEnvironmentKeys.has(key.toUpperCase())) environment[key] = value;
+  }
+  return environment;
+}
+
+export const resolveAntigravityCaBundlePath = Effect.fn("resolveAntigravityCaBundlePath")(
+  function* (platform: NodeJS.Platform, baseEnv: NodeJS.ProcessEnv) {
+    if (platform !== "linux") return undefined;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    // Bundled Python may look for certificates at paths absent on this distribution.
+    // Relative paths would resolve differently when the agent runs in the project directory.
+    for (const candidate of [
+      baseEnv.NIX_SSL_CERT_FILE,
+      "/etc/ssl/certs/ca-bundle.crt",
+      "/etc/ssl/certs/ca-certificates.crt",
+      "/etc/pki/tls/certs/ca-bundle.crt",
+      "/etc/ssl/cert.pem",
+    ]) {
+      if (
+        candidate &&
+        path.isAbsolute(candidate) &&
+        (yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false)))
+      ) {
+        return candidate;
+      }
+    }
+    return undefined;
+  },
+);
 
 export interface AntigravityProfile {
   readonly platform: NodeJS.Platform;
@@ -205,11 +242,7 @@ function antigravityEnvironment(
   auth: AntigravityAuthConfig,
   runtimeTempDirectory?: string,
 ) {
-  const environment: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(baseEnv)) {
-    // Windows treats environment keys as case-insensitive. Remove aliases too.
-    if (!removedEnvironmentKeys.has(key.toUpperCase())) environment[key] = value;
-  }
+  const environment = stripAntigravityAmbientEnvironment(baseEnv);
   // Put the GCP pair in settings.json because GOOGLE_API_KEY takes precedence in the environment.
   const credential =
     auth.authMethod === "gemini-api-key" && auth.apiKey
@@ -442,27 +475,10 @@ export const prepareAntigravityProfile = Effect.fn("prepareAntigravityProfile")(
   const geminiHome = path.resolve(input.profileDirectory);
   const acpDirectory = path.join(geminiHome, "antigravity-acp");
   const tempDirectory = input.tempDirectory ?? path.join(acpDirectory, "tmp");
-  let caBundlePath: string | undefined;
-  if (platform === "linux") {
-    // Bundled Python may look for certificates at paths absent on this distribution.
-    // Relative paths would resolve differently when the agent runs in the project directory.
-    for (const candidate of [
-      (input.baseEnv ?? process.env).NIX_SSL_CERT_FILE,
-      "/etc/ssl/certs/ca-bundle.crt",
-      "/etc/ssl/certs/ca-certificates.crt",
-      "/etc/pki/tls/certs/ca-bundle.crt",
-      "/etc/ssl/cert.pem",
-    ]) {
-      if (
-        candidate &&
-        path.isAbsolute(candidate) &&
-        (yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false)))
-      ) {
-        caBundlePath = candidate;
-        break;
-      }
-    }
-  }
+  const caBundlePath = yield* resolveAntigravityCaBundlePath(
+    platform,
+    input.baseEnv ?? process.env,
+  );
   const profile: AntigravityProfile = {
     platform,
     geminiHome,

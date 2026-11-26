@@ -2034,3 +2034,81 @@ describe("ChatGPT sharing presentation", () => {
     ).toBe(false);
   });
 });
+
+describe("Antigravity usage limits", () => {
+  const antigravity = provider({
+    instanceId: ProviderInstanceId.make("antigravity"),
+    driver: ProviderDriverKind.make("antigravity"),
+    usageLimits: {
+      checkedAt: "2026-09-03T11:00:00.000Z",
+      windows: [
+        {
+          id: "gemini-5h",
+          kind: "session",
+          label: "Gemini 5h",
+          usedPercent: 100,
+          windowDurationMins: 300,
+          resetsAt: "2026-09-03T14:00:00.000Z",
+        },
+        {
+          id: "3p-5h",
+          kind: "session",
+          label: "Claude & GPT 5h",
+          usedPercent: 10,
+          windowDurationMins: 300,
+          resetsAt: "2026-09-03T14:00:00.000Z",
+        },
+        {
+          id: "gemini-weekly",
+          kind: "weekly",
+          label: "Gemini Weekly",
+          usedPercent: 100,
+          windowDurationMins: 10080,
+          resetsAt: "2026-09-10T11:00:00.000Z",
+        },
+        {
+          id: "3p-weekly",
+          kind: "weekly",
+          label: "Claude & GPT Weekly",
+          usedPercent: 20,
+          windowDurationMins: 10080,
+          resetsAt: "2026-09-10T11:00:00.000Z",
+        },
+      ],
+    },
+  });
+
+  it("scopes exhausted windows by model group", () => {
+    expect(exhaustedUsageWindow(antigravity, now, "gemini-4-neon")?.id).toBe("gemini-5h");
+    expect(exhaustedUsageWindow(antigravity, now, "claude-opus-5-5")).toBeUndefined();
+    expect(exhaustedUsageWindow(antigravity, now, "gpt-oss-120b-medium")).toBeUndefined();
+  });
+
+  it("suppresses only the matching group's 5h window when its weekly quota is spent", () => {
+    const [pool] = collectLimitPools(
+      [
+        {
+          key: "local:antigravity",
+          driver: antigravity.driver,
+          displayName: "Antigravity",
+          email: undefined,
+          plan: "Google AI Pro",
+          accentColor: undefined,
+          environments: [{ environmentId: EnvironmentId.make("local"), label: "Local" }],
+          sourceLabel: null,
+          redeem: null,
+          limits: {
+            ...antigravity.usageLimits!,
+            windows: antigravity.usageLimits!.windows.map((entry) =>
+              entry.id === "gemini-5h" ? { ...entry, usedPercent: 30 } : entry,
+            ),
+          },
+        },
+      ],
+      now,
+    );
+    const byId = new Map(pool?.windows.map((entry) => [entry.id, entry]));
+    expect(byId.get("gemini-5h")?.usedPercent).toBe(100);
+    expect(byId.get("3p-5h")?.usedPercent).toBe(10);
+  });
+});

@@ -140,6 +140,8 @@ const makeHarness = Effect.fn("makeAntigravityProviderHarness")(function* (
     readonly enabled?: boolean;
     readonly safe?: boolean;
     readonly rememberedRuntimeModes?: ReadonlyArray<RuntimeMode>;
+    readonly checkUsageLimits?: Effect.Effect<ServerProvider["usageLimits"]>;
+    readonly invalidateUsageCache?: Effect.Effect<void>;
   } = {},
 ) {
   const savedRuntimeModes = yield* Ref.make<ReadonlyArray<ReadonlyArray<RuntimeMode>>>([]);
@@ -157,6 +159,10 @@ const makeHarness = Effect.fn("makeAntigravityProviderHarness")(function* (
       ...(options.auth ? { auth: options.auth } : {}),
       ...(options.rememberedRuntimeModes
         ? { rememberedRuntimeModes: options.rememberedRuntimeModes }
+        : {}),
+      ...(options.checkUsageLimits ? { checkUsageLimits: options.checkUsageLimits } : {}),
+      ...(options.invalidateUsageCache
+        ? { invalidateUsageCache: options.invalidateUsageCache }
         : {}),
       rememberRuntimeModes: (modes) => Ref.update(savedRuntimeModes, (saved) => [...saved, modes]),
       probe: Ref.update(probeCalls, (count) => count + 1).pipe(
@@ -1029,6 +1035,78 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
       expect(snapshot.slashCommands).toEqual(expectedCommands);
       expect(yield* Ref.get(harness.probeCalls)).toBe(1);
     }),
+  );
+
+  it.effect(
+    "reports usage limits, surfaces session tier label, invalidates on explicit refresh, and clears limits on sign-out",
+    () =>
+      Effect.gen(function* () {
+        const usageLimits = yield* Ref.make<ServerProvider["usageLimits"]>({
+          checkedAt: "2026-11-26T09:00:00.000Z",
+          windows: [
+            {
+              id: "gemini-5h",
+              kind: "session",
+              label: "Gemini 5h",
+              usedPercent: 40,
+              windowDurationMins: 300,
+              resetsAt: "2026-11-26T14:00:00.000Z",
+            },
+          ],
+        });
+        const invalidations = yield* Ref.make(0);
+        const harness = yield* makeHarness({
+          checkUsageLimits: Ref.get(usageLimits),
+          invalidateUsageCache: Ref.update(invalidations, (count) => count + 1),
+        });
+        yield* harness.initialize;
+        expect((yield* harness.provider.snapshot.getSnapshot).usageLimits?.windows).toEqual([
+          {
+            id: "gemini-5h",
+            kind: "session",
+            label: "Gemini 5h",
+            usedPercent: 40,
+            windowDurationMins: 300,
+            resetsAt: "2026-11-26T14:00:00.000Z",
+          },
+        ]);
+
+        const startedWithTier = {
+          ...started,
+          sessionSetupResult: {
+            ...sessionSetupResult,
+            _meta: { antigravity: { tier: { name: "Google AI Pro", id: "g1-pro-tier" } } },
+          },
+        };
+        yield* harness.provider.onSessionStarted(startedWithTier, "/workspace");
+        expect((yield* harness.provider.snapshot.getSnapshot).auth.label).toBe("Google AI Pro");
+
+        yield* Ref.set(usageLimits, {
+          checkedAt: "2026-11-26T09:10:00.000Z",
+          windows: [
+            {
+              id: "gemini-5h",
+              kind: "session",
+              label: "Gemini 5h",
+              usedPercent: 55,
+              windowDurationMins: 300,
+              resetsAt: "2026-11-26T14:00:00.000Z",
+            },
+          ],
+        });
+        const refreshed = yield* harness.provider.snapshot.refresh;
+        expect(yield* Ref.get(invalidations)).toBe(1);
+        expect(refreshed.usageLimits?.windows[0]?.usedPercent).toBe(55);
+
+        const signedOutPublish = yield* harness.nextPublish(
+          (snapshot) => snapshot.auth.status === "unauthenticated",
+        );
+        yield* harness.provider.onSignedOut;
+        const published = yield* signedOutPublish;
+        expect((yield* harness.provider.snapshot.getSnapshot).usageLimits).toBeUndefined();
+        expect(published?.usageLimits).toBeUndefined();
+        expect(yield* Ref.get(invalidations)).toBe(2);
+      }),
   );
 });
 

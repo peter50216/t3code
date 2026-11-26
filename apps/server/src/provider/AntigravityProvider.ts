@@ -37,6 +37,7 @@ import {
   isCommandMissingCause,
   type ServerProviderDraft,
 } from "@t3tools/provider-core/server/snapshotProbe";
+import { resolveUsageLimitsAfterProbe } from "@t3tools/provider-core/server/usageLimits";
 
 import { antigravityThinkingConfig } from "./acp/AntigravityAcpSupport.ts";
 
@@ -196,11 +197,23 @@ interface AntigravityProviderOptions {
     EffectAcpErrors.AcpError | ProviderSetupError
   >;
   readonly supportsTextGeneration: Effect.Effect<boolean>;
+  readonly checkUsageLimits?: Effect.Effect<ServerProvider["usageLimits"]>;
+  readonly invalidateUsageCache?: Effect.Effect<void>;
   readonly maintenanceCapabilities?: ProviderMaintenanceCapabilities;
   readonly auth?: { readonly type: string; readonly label: string };
   /** Modes the last session advertised, saved because initialize alone does not report them. */
   readonly rememberedRuntimeModes?: ReadonlyArray<RuntimeMode>;
   readonly rememberRuntimeModes?: (modes: ReadonlyArray<RuntimeMode>) => Effect.Effect<void>;
+}
+
+function antigravitySessionTierLabel(
+  sessionSetupResult: AcpSessionRuntime.AcpSessionRuntimeStartResult["sessionSetupResult"],
+): string | undefined {
+  const meta = sessionSetupResult._meta;
+  const antigravity = Predicate.isObject(meta) ? meta.antigravity : undefined;
+  const tier = Predicate.isObject(antigravity) ? antigravity.tier : undefined;
+  const name = Predicate.isObject(tier) && typeof tier.name === "string" ? tier.name.trim() : "";
+  return name || undefined;
 }
 
 const RUNTIME_MODES_WITHOUT_AUTO = [
@@ -324,10 +337,16 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
               : `Antigravity did not respond to its local health check within ${timeoutMs / 1_000} seconds.`;
     const supportsTextGeneration =
       initialized !== undefined ? yield* options.supportsTextGeneration : false;
+    const probedUsageLimits =
+      initialized !== undefined &&
+      before.draft.auth.status !== "unauthenticated" &&
+      options.checkUsageLimits !== undefined
+        ? yield* options.checkUsageLimits
+        : undefined;
     const updatedAt = DateTime.formatIso(yield* DateTime.now);
     const applyCheck = (state: AntigravityProviderState) => {
       if (state.authRevision !== before.authRevision) return state;
-      const { message: _previousMessage, ...draft } = state.draft;
+      const { message: _previousMessage, usageLimits: previousUsageLimits, ...draft } = state.draft;
       const authenticated = draft.auth.status === "authenticated";
       const message =
         errorMessage ??
@@ -336,6 +355,16 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
           : draft.auth.status === "unauthenticated"
             ? signInMessage
             : authUncheckedMessage);
+      const usageLimits = missingInstallation
+        ? undefined
+        : probedUsageLimits !== undefined
+          ? resolveUsageLimitsAfterProbe({
+              published: previousUsageLimits,
+              probed: probedUsageLimits,
+            })
+          : draft.auth.status === "unauthenticated"
+            ? undefined
+            : previousUsageLimits;
       return {
         ...state,
         draft: {
@@ -360,6 +389,7 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
                   supportsTextGeneration && draft.auth.status !== "unauthenticated",
               }
             : {}),
+          ...(usageLimits ? { usageLimits } : {}),
           ...(message ? { message } : {}),
         },
       } satisfies AntigravityProviderState;
@@ -374,6 +404,32 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
     return yield* options.stampIdentity(next.draft);
   });
 
+  const applyProbedUsageLimits = Effect.fn("AntigravityProvider.applyProbedUsageLimits")(function* (
+    probed: ServerProvider["usageLimits"],
+    expectedAuthRevision?: number,
+  ) {
+    if (probed === undefined) return;
+    yield* SubscriptionRef.updateSome(metadata, (state) => {
+      if (
+        (expectedAuthRevision !== undefined && state.authRevision !== expectedAuthRevision) ||
+        state.draft.auth.status === "unauthenticated"
+      ) {
+        return Option.none();
+      }
+      const merged = resolveUsageLimitsAfterProbe({
+        published: state.draft.usageLimits,
+        probed,
+      });
+      if (Equal.equals(state.draft.usageLimits, merged)) return Option.none();
+      const { usageLimits: _previous, ...draft } = state.draft;
+      return Option.some({
+        ...state,
+        draft: merged ? { ...draft, usageLimits: merged } : draft,
+      });
+    });
+  });
+
+  const providerScope = yield* Effect.scope;
   const maintenanceCapabilities =
     options.maintenanceCapabilities ??
     makeManualOnlyProviderMaintenanceCapabilities({
@@ -387,6 +443,14 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
     haveSettingsChanged: () => false,
     initialSnapshot: () => getSnapshot,
     checkProvider: checkProvider(),
+    ...(options.checkUsageLimits
+      ? {
+          checkUsageLimits: options.checkUsageLimits.pipe(
+            Effect.tap((probed) => applyProbedUsageLimits(probed)),
+          ),
+        }
+      : {}),
+    ...(options.invalidateUsageCache ? { invalidateUsageCache: options.invalidateUsageCache } : {}),
     enrichSnapshot: ({ publishSnapshot }) =>
       SubscriptionRef.changes(metadata).pipe(
         Stream.runForEach((state) =>
@@ -411,56 +475,85 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
     const supportsTextGeneration = yield* options.supportsTextGeneration;
     const updatedAt = DateTime.formatIso(yield* DateTime.now);
     const supportedRuntimeModes = antigravityRuntimeModes(started.sessionSetupResult);
-    const previousModes = yield* SubscriptionRef.modify(metadata, (state) => {
-      if (
-        state.authRevision !== before.authRevision &&
-        state.draft.auth.status === "unauthenticated"
-      ) {
-        return [supportedRuntimeModes, state] as const;
-      }
-      const { message: _previousMessage, ...draft } = state.draft;
-      const workspaces = draft.workspaceSnapshots ?? [];
-      const workspace = cwd ? workspaces.find((entry) => entry.cwd === cwd) : undefined;
-      const skills = cwd ? discoveredSkills.get(cwd) : undefined;
-      const next = {
-        authRevision: state.authRevision + 1,
-        draft: {
-          ...draft,
-          installed: true,
-          status: "ready",
-          version: started.initializeResult.agentInfo?.version || draft.version,
-          auth: {
-            status: "authenticated",
-            type: options.auth?.type ?? "oauth-personal",
-            label: options.auth?.label ?? "Google account",
+    const tierLabel = antigravitySessionTierLabel(started.sessionSetupResult);
+    const [previousModes, nextAuthRevision, needsUsageRefresh] = yield* SubscriptionRef.modify(
+      metadata,
+      (state) => {
+        if (
+          state.authRevision !== before.authRevision &&
+          state.draft.auth.status === "unauthenticated"
+        ) {
+          return [[supportedRuntimeModes, state.authRevision, false] as const, state] as const;
+        }
+        const { message: _previousMessage, ...draft } = state.draft;
+        const workspaces = draft.workspaceSnapshots ?? [];
+        const workspace = cwd ? workspaces.find((entry) => entry.cwd === cwd) : undefined;
+        const skills = cwd ? discoveredSkills.get(cwd) : undefined;
+        const authRevision = state.authRevision + 1;
+        const next = {
+          authRevision,
+          draft: {
+            ...draft,
+            installed: true,
+            status: "ready",
+            version: started.initializeResult.agentInfo?.version || draft.version,
+            auth: {
+              status: "authenticated",
+              type: options.auth?.type ?? "oauth-personal",
+              label: tierLabel ?? options.auth?.label ?? "Google account",
+            },
+            checkedAt: updatedAt,
+            models: buildAntigravityModelsFromSession(started.sessionSetupResult, thinkingLevels, {
+              defaultModel: defaultModelSlug,
+              authoritative,
+            }),
+            supportedRuntimeModes,
+            supportsTextGeneration,
+            ...(cwd
+              ? {
+                  workspaceSnapshots: [
+                    ...workspaces.filter((entry) => entry.cwd !== cwd),
+                    {
+                      cwd,
+                      checkedAt: updatedAt,
+                      slashCommands:
+                        workspace?.slashCommands ??
+                        workspaceCommands.get(cwd) ??
+                        draft.slashCommands,
+                      skills: skills ?? workspace?.skills ?? [],
+                      ...(skills ? {} : { slashCommandsPending: true }),
+                    },
+                  ].slice(-MAX_WORKSPACE_SNAPSHOTS),
+                }
+              : {}),
           },
-          checkedAt: updatedAt,
-          models: buildAntigravityModelsFromSession(started.sessionSetupResult, thinkingLevels, {
-            defaultModel: defaultModelSlug,
-            authoritative,
-          }),
-          supportedRuntimeModes,
-          supportsTextGeneration,
-          ...(cwd
-            ? {
-                workspaceSnapshots: [
-                  ...workspaces.filter((entry) => entry.cwd !== cwd),
-                  {
-                    cwd,
-                    checkedAt: updatedAt,
-                    slashCommands:
-                      workspace?.slashCommands ?? workspaceCommands.get(cwd) ?? draft.slashCommands,
-                    skills: skills ?? workspace?.skills ?? [],
-                    ...(skills ? {} : { slashCommandsPending: true }),
-                  },
-                ].slice(-MAX_WORKSPACE_SNAPSHOTS),
-              }
-            : {}),
-        },
-      } satisfies AntigravityProviderState;
-      return [draft.supportedRuntimeModes, next] as const;
-    });
+        } satisfies AntigravityProviderState;
+        const shouldRefreshUsage =
+          draft.usageLimits === undefined ||
+          draft.usageLimits.unavailable?.reason === "probeFailed";
+        return [
+          [draft.supportedRuntimeModes, authRevision, shouldRefreshUsage] as const,
+          next,
+        ] as const;
+      },
+    );
     yield* rememberRuntimeModes(previousModes, supportedRuntimeModes);
+    if (options.checkUsageLimits !== undefined && needsUsageRefresh) {
+      yield* (options.invalidateUsageCache ?? Effect.void).pipe(
+        Effect.andThen(options.checkUsageLimits),
+        Effect.flatMap((probed) =>
+          Effect.gen(function* () {
+            if (probed === undefined) return;
+            yield* applyProbedUsageLimits(probed, nextAuthRevision);
+            if (!probed.unavailable && probed.windows.length > 0) {
+              yield* managed.applyUsageLimits({ ...probed, complete: true });
+            }
+          }),
+        ),
+        Effect.ignoreCause({ log: true }),
+        Effect.forkIn(providerScope),
+      );
+    }
   });
 
   const onConfigOptionsUpdated = Effect.fn("AntigravityProvider.onConfigOptionsUpdated")(function* (
@@ -521,29 +614,35 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
 
   const clearAccountMetadata = Effect.fn("AntigravityProvider.clearAccountMetadata")(function* () {
     if (!settings.enabled) return;
+    if (options.invalidateUsageCache) {
+      yield* options.invalidateUsageCache;
+    }
     const updatedAt = DateTime.formatIso(yield* DateTime.now);
-    const previousModes = yield* SubscriptionRef.modify(metadata, (state) => [
-      state.draft.supportedRuntimeModes,
-      {
-        authRevision: state.authRevision + 1,
-        draft: {
-          ...state.draft,
-          auth: {
-            status: "unauthenticated",
-            ...(usesCredentials ? options.auth : {}),
+    const previousModes = yield* SubscriptionRef.modify(metadata, (state) => {
+      const { usageLimits: _previousUsageLimits, ...draft } = state.draft;
+      return [
+        state.draft.supportedRuntimeModes,
+        {
+          authRevision: state.authRevision + 1,
+          draft: {
+            ...draft,
+            auth: {
+              status: "unauthenticated",
+              ...(usesCredentials ? options.auth : {}),
+            },
+            status: "warning",
+            message: signInMessage,
+            checkedAt: updatedAt,
+            models: [],
+            slashCommands: [],
+            skills: [],
+            workspaceSnapshots: [],
+            supportedRuntimeModes: RUNTIME_MODES_WITHOUT_AUTO,
+            supportsTextGeneration: false,
           },
-          status: "warning",
-          message: signInMessage,
-          checkedAt: updatedAt,
-          models: [],
-          slashCommands: [],
-          skills: [],
-          workspaceSnapshots: [],
-          supportedRuntimeModes: RUNTIME_MODES_WITHOUT_AUTO,
-          supportsTextGeneration: false,
-        },
-      } satisfies AntigravityProviderState,
-    ]);
+        } satisfies AntigravityProviderState,
+      ];
+    });
     yield* rememberRuntimeModes(previousModes, RUNTIME_MODES_WITHOUT_AUTO);
     discoveredSkills.clear();
     workspaceCommands.clear();
@@ -583,7 +682,13 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
   });
 
   return {
-    snapshot: { ...managed, getSnapshot },
+    snapshot: {
+      ...managed,
+      getSnapshot,
+      refresh: options.invalidateUsageCache
+        ? options.invalidateUsageCache.pipe(Effect.andThen(managed.refresh))
+        : managed.refresh,
+    },
     onSessionStarted,
     onConfigOptionsUpdated,
     onAvailableCommands,

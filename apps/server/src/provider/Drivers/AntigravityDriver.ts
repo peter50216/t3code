@@ -13,7 +13,10 @@ import {
   NodeRuntimeUnavailableError,
   nodeRuntimeUnavailableMessage,
 } from "@t3tools/shared/nodeRuntime";
+import * as Cache from "effect/Cache";
+import * as DateTime from "effect/DateTime";
 import * as Digest from "effect/crypto/Digest";
+import * as Duration from "effect/Duration";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -39,6 +42,7 @@ import * as AntigravityInstallation from "../AntigravityInstallation.ts";
 import { brokenRuntimeError } from "../providerCompatibility.ts";
 import * as AntigravityUsage from "./AntigravityUsage.ts";
 import {
+  ANTIGRAVITY_OAUTH_TOKEN_FILENAME,
   antigravityAuthConfigIssue,
   antigravityAuthLabel,
   antigravityAuthUsesBrowser,
@@ -48,6 +52,8 @@ import {
   resolveAntigravityInstanceDirectories,
   type AntigravityAuthConfig,
 } from "../antigravityAuthSupport.ts";
+import { probeAntigravityUsageLimits } from "../antigravityUsageLimits.ts";
+import { makeUnavailableUsageLimits } from "@t3tools/provider-core/server/usageLimits";
 import {
   antigravityModelOptions,
   antigravitySessionMode,
@@ -159,9 +165,10 @@ export const AntigravityDriver: ProviderDriver<
       gcpLocation: settings.gcpLocation,
     };
     const authConfigIssue = antigravityAuthConfigIssue(auth);
+    const platform = yield* HostProcess.Platform;
     const processEnvironment = yield* mergeProviderInstanceEnvironment(environment);
     const userHome = resolveAntigravityUserHome(
-      yield* HostProcess.Platform,
+      platform,
       processEnvironment,
       yield* HostProcess.HomeDirectory,
     );
@@ -568,11 +575,55 @@ export const AntigravityDriver: ProviderDriver<
       };
     });
 
+    const usageLimitsCache = yield* Cache.makeWith(
+      (_key: "limits") =>
+        Effect.gen(function* () {
+          if (authConfigIssue !== null) return undefined;
+          if (auth.authMethod === "gemini-api-key" || auth.authMethod === "agent-platform") {
+            return makeUnavailableUsageLimits({
+              checkedAt: DateTime.formatIso(yield* DateTime.now),
+              reason: "unsupported",
+            });
+          }
+          const tokenExists = yield* fileSystem
+            .exists(
+              path.join(profileDirectory, "antigravity-acp", ANTIGRAVITY_OAUTH_TOKEN_FILENAME),
+            )
+            .pipe(Effect.orElseSucceed(() => false));
+          if (!tokenExists) return undefined;
+          const executable = yield* installation
+            .acquire(settings.binaryPath, processEnvironment)
+            .pipe(Effect.option);
+          if (Option.isNone(executable)) return undefined;
+          return yield* probeAntigravityUsageLimits({
+            executablePath: executable.value.executablePath,
+            profileDirectory,
+            tempDirectory: directories.runtimeTemp,
+            authMethod: auth.authMethod,
+            baseEnv: processEnvironment,
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.provideService(Path.Path, path),
+            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+            Effect.provideService(HostProcess.Platform, platform),
+          );
+        }).pipe(Effect.scoped),
+      {
+        capacity: 1,
+        timeToLive: (exit) =>
+          Exit.isSuccess(exit) && exit.value !== undefined && exit.value.unavailable === undefined
+            ? Duration.minutes(5)
+            : Duration.zero,
+      },
+    );
+
     const provider = yield* makeAntigravityProvider(settings, {
       environment: processEnvironment,
       stampIdentity: classifyModels,
       probe,
       auth: { type: auth.authMethod, label: antigravityAuthLabel(auth.authMethod) },
+      checkUsageLimits: Cache.get(usageLimitsCache, "limits"),
+      invalidateUsageCache: Cache.invalidateAll(usageLimitsCache),
       ...(rememberedRuntimeModes ? { rememberedRuntimeModes } : {}),
       rememberRuntimeModes: (modes) =>
         writeFileStringAtomically({

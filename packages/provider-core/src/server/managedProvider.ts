@@ -106,20 +106,29 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       if (state.enrichmentGeneration !== generation) {
         return [null, state] as const;
       }
-      // Enrichment must not revert usage updates newer than its input snapshot.
+      // Enrichment must not revert usage updates newer than its input snapshot, nor keep stale
+      // limits after the provider signs out.
+      const signedOut = nextSnapshot.auth.status === "unauthenticated";
       const merged = withUsageLimits(
-        state.usageAuthLabel === undefined
+        signedOut || state.usageAuthLabel === undefined
           ? nextSnapshot
           : {
               ...nextSnapshot,
               auth: { ...nextSnapshot.auth, label: state.usageAuthLabel ?? undefined },
             },
-        state.snapshot.usageLimits,
+        signedOut ? nextSnapshot.usageLimits : state.snapshot.usageLimits,
       );
       if (Equal.equals(state.snapshot, merged)) {
         return [null, state] as const;
       }
-      return [merged, { ...state, snapshot: merged }] as const;
+      return [
+        merged,
+        {
+          ...state,
+          snapshot: merged,
+          ...(signedOut ? { usageAuthLabel: undefined } : {}),
+        },
+      ] as const;
     });
     if (snapshotToPublish === null) {
       return;
