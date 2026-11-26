@@ -2,6 +2,7 @@
 import * as NodeCrypto from "node:crypto";
 
 import type { OrchestrationV2TurnItem } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as FileSystem from "effect/FileSystem";
@@ -169,7 +170,11 @@ export const storeServedToolOutputImages = Effect.fn(
       const stored = yield* fileSystem.exists(filePath).pipe(
         Effect.flatMap((exists) =>
           exists
-            ? Effect.void
+            ? // A retention job deletes these files by mtime, so a reuse marks the file as fresh.
+              DateTime.now.pipe(
+                Effect.map(DateTime.toDateUtc),
+                Effect.flatMap((now) => fileSystem.utimes(filePath, now, now)),
+              )
             : fileSystem.makeDirectory(config.attachmentsDir, { recursive: true }).pipe(
                 // Rename so an interrupted write never leaves a file that passes the exists check.
                 Effect.andThen(fileSystem.writeFile(partPath, bytes)),

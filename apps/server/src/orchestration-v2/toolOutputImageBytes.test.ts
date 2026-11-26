@@ -293,4 +293,33 @@ describe("storeServedToolOutputImages", () => {
       ),
     ),
   );
+
+  effectIt.live("marks a stored image as fresh when a tool returns it again", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const config = yield* ServerConfig.ServerConfig;
+      const item = toolItem({
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/png", data: PNG_BASE64 } },
+        ],
+      });
+      const first = yield* storeServedToolOutputImages(item);
+      const [image] = toolOutputImages(first.type === "dynamic_tool" ? first.output : null);
+      const filePath = `${config.attachmentsDir}/${image?.attachmentId}.png`;
+      const old = DateTime.toDateUtc(DateTime.makeUnsafe("2020-01-01T00:00:00.000Z"));
+      yield* fs.utimes(filePath, old, old);
+
+      yield* storeServedToolOutputImages(item);
+
+      const info = yield* fs.stat(filePath);
+      const mtime = info.mtime._tag === "Some" ? info.mtime.value.getTime() : 0;
+      expect(mtime).toBeGreaterThan(old.getTime());
+    }).pipe(
+      Effect.provide(
+        ServerConfig.layerTest(process.cwd(), { prefix: "tool-output-images-" }).pipe(
+          Layer.provideMerge(NodeServices.layer),
+        ),
+      ),
+    ),
+  );
 });
