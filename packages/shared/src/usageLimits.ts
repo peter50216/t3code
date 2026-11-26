@@ -155,6 +155,34 @@ function cursorUsageWindowRank(id: string): number {
   return rank < 0 ? CURSOR_USAGE_WINDOWS.length : rank;
 }
 
+const ANTIGRAVITY_USAGE_WINDOW_ORDER = [
+  "gemini-5h",
+  "gemini-weekly",
+  "3p-5h",
+  "3p-weekly",
+] as const;
+
+function antigravityUsageWindowRank(
+  window: Pick<ServerProviderUsageWindow, "id" | "kind">,
+): number {
+  const exact = ANTIGRAVITY_USAGE_WINDOW_ORDER.indexOf(
+    window.id as (typeof ANTIGRAVITY_USAGE_WINDOW_ORDER)[number],
+  );
+  if (exact >= 0) return exact;
+  const groupRank = window.id.startsWith("gemini-") ? 0 : window.id.startsWith("3p-") ? 1 : 2;
+  return ANTIGRAVITY_USAGE_WINDOW_ORDER.length + groupRank * 4 + WINDOW_KIND_ORDER[window.kind];
+}
+
+function sortAntigravityUsageWindows<W extends Pick<ServerProviderUsageWindow, "id" | "kind">>(
+  windows: readonly W[],
+): W[] {
+  return [...windows].sort(
+    (left, right) =>
+      antigravityUsageWindowRank(left) - antigravityUsageWindowRank(right) ||
+      left.id.localeCompare(right.id),
+  );
+}
+
 export function providersWithLimits(
   providers: readonly ServerProvider[],
 ): readonly ServerProvider[] {
@@ -550,6 +578,9 @@ function hasDuplicateCursorTotal(pool: LimitPool): boolean {
 }
 
 export function displayLimitWindows(pool: LimitPool) {
+  if (pool.driver === "antigravity") {
+    return sortAntigravityUsageWindows(pool.windows);
+  }
   if (pool.driver !== "cursor") return pool.windows;
   const hasAuto = pool.windows.some((window) => window.id === "autoPercentUsed");
   const hasApi = pool.windows.some((window) => window.id === "apiPercentUsed");
@@ -1050,6 +1081,10 @@ export function collectProviderUsageLimits(
     const shownCredits = showHubCredits
       ? hubCredits.account.usageLimits.resetCredits
       : credits?.limits.resetCredits;
+    const orderedLimits =
+      provider.driver === "antigravity"
+        ? { ...limits, windows: sortAntigravityUsageWindows(limits.windows) }
+        : limits;
     accounts.push({
       id: provider.instanceId,
       driver: provider.driver,
@@ -1067,7 +1102,7 @@ export function collectProviderUsageLimits(
       ...(provider.displayName ? { displayName: provider.displayName } : {}),
       ...(provider.accentColor ? { accentColor: provider.accentColor } : {}),
       ...(provider.auth.email ? { email: provider.auth.email } : {}),
-      limits: shownCredits ? { ...limits, resetCredits: shownCredits } : limits,
+      limits: shownCredits ? { ...orderedLimits, resetCredits: shownCredits } : orderedLimits,
     });
   }
   for (const source of shownHubs) {

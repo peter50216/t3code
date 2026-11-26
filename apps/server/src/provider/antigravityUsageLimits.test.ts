@@ -75,14 +75,6 @@ describe("antigravityUsageResponseToLimits", () => {
       checkedAt,
       windows: [
         {
-          id: "3p-5h",
-          kind: "session",
-          label: "Claude & GPT 5h",
-          usedPercent: 80,
-          windowDurationMins: 300,
-          resetsAt: "2026-11-26T14:20:00.000Z",
-        },
-        {
           id: "gemini-5h",
           kind: "session",
           label: "Gemini 5h",
@@ -91,20 +83,28 @@ describe("antigravityUsageResponseToLimits", () => {
           resetsAt: "2026-11-26T12:05:13.000Z",
         },
         {
-          id: "3p-weekly",
-          kind: "weekly",
-          label: "Claude & GPT Weekly",
-          usedPercent: 0,
-          windowDurationMins: 10080,
-          resetsAt: "2026-12-03T09:20:00.000Z",
-        },
-        {
           id: "gemini-weekly",
           kind: "weekly",
           label: "Gemini Weekly",
           usedPercent: 12.5,
           windowDurationMins: 10080,
           resetsAt: "2026-12-03T07:05:13.000Z",
+        },
+        {
+          id: "3p-5h",
+          kind: "session",
+          label: "Claude & GPT 5h",
+          usedPercent: 80,
+          windowDurationMins: 300,
+          resetsAt: "2026-11-26T14:20:00.000Z",
+        },
+        {
+          id: "3p-weekly",
+          kind: "weekly",
+          label: "Claude & GPT Weekly",
+          usedPercent: 0,
+          windowDurationMins: 10080,
+          resetsAt: "2026-12-03T09:20:00.000Z",
         },
       ],
     });
@@ -246,10 +246,10 @@ it.layer(NodeServices.layer)("probeAntigravityUsageLimits", (it) => {
       });
       expect(limits?.unavailable).toBeUndefined();
       expect(limits?.windows.map((window) => [window.id, window.usedPercent])).toEqual([
-        ["3p-5h", 80],
         ["gemini-5h", 45],
-        ["3p-weekly", 0],
         ["gemini-weekly", 12.5],
+        ["3p-5h", 80],
+        ["3p-weekly", 0],
       ]);
       // Scoped temp HOME should be cleaned up.
       expect(yield* fs.readDirectory(tempDir)).toEqual([]);

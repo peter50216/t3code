@@ -2110,5 +2110,34 @@ describe("Antigravity usage limits", () => {
     const byId = new Map(pool?.windows.map((entry) => [entry.id, entry]));
     expect(byId.get("gemini-5h")?.usedPercent).toBe(100);
     expect(byId.get("3p-5h")?.usedPercent).toBe(10);
+    expect(displayLimitWindows(pool!).map((entry) => entry.id)).toEqual([
+      "gemini-5h",
+      "gemini-weekly",
+      "3p-5h",
+      "3p-weekly",
+    ]);
+  });
+
+  it("orders Antigravity windows in /usage-limits report as Gemini 5h/weekly then 3p 5h/weekly", () => {
+    const report = collectProviderUsageLimits(
+      antigravity.instanceId,
+      [
+        {
+          ...antigravity,
+          usageLimits: {
+            ...antigravity.usageLimits!,
+            windows: [...antigravity.usageLimits!.windows].reverse(),
+          },
+        },
+      ],
+      [],
+      now,
+    );
+    expect(report?.accounts[0]?.limits.windows.map((entry) => entry.id)).toEqual([
+      "gemini-5h",
+      "gemini-weekly",
+      "3p-5h",
+      "3p-weekly",
+    ]);
   });
 });

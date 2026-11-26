@@ -9,7 +9,6 @@ import type {
 import {
   clampPercent,
   makeUnavailableUsageLimits,
-  makeUsageLimits,
 } from "@t3tools/provider-core/server/usageLimits";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as DateTime from "effect/DateTime";
@@ -194,7 +193,24 @@ export function antigravityUsageResponseToLimits(input: {
       });
     }
   }
-  return makeUsageLimits({ checkedAt, windows });
+  const windowRank = (window: ServerProviderUsageWindow) => {
+    const groupRank = window.id.startsWith("gemini-") ? 0 : window.id.startsWith("3p-") ? 1 : 2;
+    const kindRank =
+      window.kind === "session"
+        ? 0
+        : window.kind === "weekly"
+          ? 1
+          : window.kind === "monthly"
+            ? 2
+            : 3;
+    return groupRank * 4 + kindRank;
+  };
+  return {
+    checkedAt,
+    windows: windows.toSorted(
+      (left, right) => windowRank(left) - windowRank(right) || left.id.localeCompare(right.id),
+    ),
+  };
 }
 
 export function parseAntigravityUsageOutput(

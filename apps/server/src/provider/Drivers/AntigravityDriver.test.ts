@@ -941,14 +941,6 @@ it.layer(layerTest)("AntigravityDriver", (it) => {
       expect(snapshot.usageLimits?.unavailable).toBeUndefined();
       expect(snapshot.usageLimits?.windows).toEqual([
         {
-          id: "3p-5h",
-          kind: "session",
-          label: "Claude & GPT 5h",
-          usedPercent: 0,
-          windowDurationMins: 300,
-          resetsAt: "2026-11-26T14:00:00.000Z",
-        },
-        {
           id: "gemini-5h",
           kind: "session",
           label: "Gemini 5h",
@@ -963,6 +955,14 @@ it.layer(layerTest)("AntigravityDriver", (it) => {
           usedPercent: 10,
           windowDurationMins: 10080,
           resetsAt: "2026-12-03T12:00:00.000Z",
+        },
+        {
+          id: "3p-5h",
+          kind: "session",
+          label: "Claude & GPT 5h",
+          usedPercent: 0,
+          windowDurationMins: 300,
+          resetsAt: "2026-11-26T14:00:00.000Z",
         },
       ]);
     }),
