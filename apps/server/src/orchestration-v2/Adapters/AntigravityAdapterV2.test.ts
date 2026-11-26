@@ -1332,6 +1332,7 @@ const openSessionWithRunningCommand = Effect.fn("openSessionWithRunningCommand")
   options?: {
     readonly profileDirectory?: string;
     readonly initialToolCalls?: ReadonlyArray<EffectAcpSchema.SessionUpdate>;
+    readonly runtimeMode?: "full-access" | "auto" | "approval-required";
   },
 ) {
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -1466,7 +1467,7 @@ const openSessionWithRunningCommand = Effect.fn("openSessionWithRunningCommand")
           },
         });
   const runtimePolicy = ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
-    runtimeMode: "full-access",
+    runtimeMode: options?.runtimeMode ?? "full-access",
     interactionMode: "default",
     cwd: process.cwd(),
   });
@@ -1507,7 +1508,7 @@ const openSessionWithRunningCommand = Effect.fn("openSessionWithRunningCommand")
         title: "Antigravity wake",
         providerInstanceId: instanceId,
         modelSelection,
-        runtimeMode: "full-access",
+        runtimeMode: options?.runtimeMode ?? "full-access",
         interactionMode: "default",
         branch: null,
         worktreePath: process.cwd(),
@@ -1793,6 +1794,86 @@ describe("AntigravityAdapterV2 work after the prompt ends", () => {
       yield* TestClock.adjust("3 seconds");
       const run = yield* until((event) => event.type === "turn.terminal");
       assert.include(JSON.stringify(run), "Here is the chart.", "the question kept the run open");
+    }).pipe(Effect.provide(layerSession)),
+  );
+
+  it.effect("shows CommandLine in command approval prompts instead of generic Run command", () =>
+    Effect.gen(function* () {
+      const { send, startTurn, until, throughPromptSettled, requestPermission } =
+        yield* openSessionWithRunningCommand({ WaitMsBeforeAsync: 10000 }, undefined, undefined, {
+          runtimeMode: "approval-required",
+        });
+      yield* startTurn(1, false);
+      yield* throughPromptSettled;
+
+      const directPermission = yield* requestPermission(
+        {
+          sessionId: "mock-session-1",
+          toolCall: {
+            toolCallId: "call_push",
+            kind: "execute",
+            title: "Run command",
+            status: "pending",
+            rawInput: { CommandLine: "git push origin main", Cwd: "/workspace" },
+          },
+          options: [
+            { optionId: "allow", name: "Allow", kind: "allow_once" },
+            { optionId: "deny", name: "Deny", kind: "reject_once" },
+          ],
+        },
+        { requestId: "permission-direct", method: "session/request_permission" },
+      ).pipe(Effect.forkScoped({ startImmediately: true }));
+      const directEvents = yield* until(
+        (event) => event.type === "turn_item.updated" && event.turnItem.type === "approval_request",
+      );
+      const directItem = directEvents.at(-1);
+      assert.equal(
+        directItem?.type === "turn_item.updated" &&
+          directItem.turnItem.type === "approval_request" &&
+          directItem.turnItem.prompt,
+        "git push origin main",
+      );
+      yield* Fiber.interrupt(directPermission);
+
+      yield* send({
+        sessionUpdate: "tool_call",
+        toolCallId: "call_test",
+        kind: "execute",
+        title: "Run command",
+        status: "pending",
+        rawInput: { CommandLine: "pnpm test", Cwd: "/workspace" },
+      });
+      const trackedPermission = yield* requestPermission(
+        {
+          sessionId: "mock-session-1",
+          toolCall: {
+            toolCallId: "call_test",
+            kind: "execute",
+            title: "Run command",
+            status: "pending",
+            rawInput: {},
+          },
+          options: [
+            { optionId: "allow", name: "Allow", kind: "allow_once" },
+            { optionId: "deny", name: "Deny", kind: "reject_once" },
+          ],
+        },
+        { requestId: "permission-tracked", method: "session/request_permission" },
+      ).pipe(Effect.forkScoped({ startImmediately: true }));
+      const trackedEvents = yield* until(
+        (event) =>
+          event.type === "turn_item.updated" &&
+          event.turnItem.type === "approval_request" &&
+          event.turnItem.nativeItemRef?.nativeId === "call_test",
+      );
+      const trackedItem = trackedEvents.at(-1);
+      assert.equal(
+        trackedItem?.type === "turn_item.updated" &&
+          trackedItem.turnItem.type === "approval_request" &&
+          trackedItem.turnItem.prompt,
+        "pnpm test",
+      );
+      yield* Fiber.interrupt(trackedPermission);
     }).pipe(Effect.provide(layerSession)),
   );
 
